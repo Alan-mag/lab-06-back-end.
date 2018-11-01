@@ -16,23 +16,32 @@ app.get('/', (request, response) => {
 });
 
 app.get('/location', (request, response) => {
-  const locationData = searchToLatLng(request.query.data);
-  response.send(locationData);
+  searchToLatLng(request.query.data).then((locationData) => {
+    console.log(locationData)
+    response.send(locationData);
+  })
 });
 
 function searchToLatLng(query) {
-  // call geo api from google
-  const location = new Location();
-  return location;
+  let apiKey = process.env.GEO_API;
+  return new Promise((resolve, reject) => {
+    request
+      .get(`https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${apiKey}`)
+      .then(res => {
+        let jsonData = res.body;
+        const location = new Location(jsonData.results[0]);
+        resolve(location);
+      })
+  })
 }
 
 function Location(data) {
   this.formatted_query = data.formatted_address;
   this.latitude = data.geometry.location.lat;
   this.longitude = data.geometry.location.lng;
-
 }
 
 app.use('*', (request, response) => response.send('Sorry, that route does not exist.'))
 
 app.listen(PORT,() => console.log(`Listening on port ${PORT}`));
+
