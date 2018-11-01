@@ -39,6 +39,7 @@ function Location(data) {
   this.formatted_query = data.formatted_address;
   this.latitude = data.geometry.location.lat;
   this.longitude = data.geometry.location.lng;
+  this.search_query = data.address_components[0].long_name;
 }
 
 app.use('*', (request, response) => response.send('Sorry, that route does not exist.'))
