@@ -31,11 +31,9 @@ function getWeather(request, response) {
   const _URL = `https://api.darksky.net/forecast/${process.env.DARK_SKY}/${request.query.data.latitude},${request.query.data.longitude}`;
   return superagent.get(_URL)
     .then(result => {
-      const weatherSummaries = [];
-      result.body.daily.data.forEach(day => {
-        const summary = new Weather(day);
-        weatherSummaries.push(summary);
-      });
+      let weatherSummaries = result.body.daily.data.map((day) => {
+        return new Weather(day);
+      })
       response.send(weatherSummaries);
     })
     .catch(error => handleError(error, response));
