@@ -21,6 +21,7 @@ app.get('/', (request, response) => {
 
 app.get('/location', getLocation);
 app.get('/weather', getWeather);
+app.get('/yelp', getYelp);
 
 
 // HELPER METHODS //
@@ -40,13 +41,27 @@ function getWeather(request, response) {
 }
 
 function getLocation(request, response) {
-  console.log(request);
   const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${request.query.data}&key=${process.env.GEO_API}`;
   return superagent.get(_URL)
     .then(result => {
       const jsonData = result.body;
       const location = new Location(jsonData.results[0]);
       response.send(location);
+    })
+    .catch(err => {
+      handleError(err);
+    })
+}
+
+function getYelp(request, response) {
+  const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.latitude}&longitude=${request.query.longitude}`;
+  return superagent.get(_URL)
+    .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
+    .then(result => {
+      let restaurantSummaries = result.body.businesses.map((restaurant) => {
+        return new Restaurant(restaurant);
+      })
+      response.send(restaurantSummaries);
     })
     .catch(err => {
       handleError(err);
@@ -67,6 +82,14 @@ function Weather(forecast, timeMilliseconds) {
   let dateString = date.toString().slice(0, 15);
   this.forecast = forecast;
   this.time = dateString;
+}
+
+function Restaurant(data) {
+  this.name = data.name;
+  this.image_url = data.image_url;
+  this.price = data.price;
+  this.rating = data.rating;
+  this.url = data.url;
 }
 
 // ERROR HANDLER //
