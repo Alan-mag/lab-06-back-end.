@@ -22,6 +22,7 @@ app.get('/', (request, response) => {
 app.get('/location', getLocation);
 app.get('/weather', getWeather);
 app.get('/yelp', getYelp);
+app.get('/movies', getMovies);
 
 
 // HELPER METHODS //
@@ -32,7 +33,7 @@ function getWeather(request, response) {
   const _URL = `https://api.darksky.net/forecast/${process.env.DARK_SKY}/${request.query.data.latitude},${request.query.data.longitude}`;
   return superagent.get(_URL)
     .then(result => {
-      let weatherSummaries = result.body.daily.data.map((day) => {
+      const weatherSummaries = result.body.daily.data.map((day) => {
         return new Weather(day);
       })
       response.send(weatherSummaries);
@@ -58,10 +59,26 @@ function getYelp(request, response) {
   return superagent.get(_URL)
     .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
     .then(result => {
-      let restaurantSummaries = result.body.businesses.map((restaurant) => {
+      const restaurantSummaries = result.body.businesses.map((restaurant) => {
         return new Restaurant(restaurant);
       })
       response.send(restaurantSummaries);
+    })
+    .catch(err => {
+      handleError(err);
+    })
+}
+
+// https://api.themoviedb.org/3/movie/550?api_key=
+function getMovies(request, response) {
+  const _URL = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_KEY}&query=${request.query.city}`;
+  return superagent.get(_URL)
+    .then((val) => {
+      let movieSummary = val.body.results.map((movieData) => {
+        return new Movie(movieData)
+      });
+      movieSummary = movieSummary.slice(0, 51);
+      response.send(movieSummary);
     })
     .catch(err => {
       handleError(err);
@@ -90,6 +107,16 @@ function Restaurant(data) {
   this.price = data.price;
   this.rating = data.rating;
   this.url = data.url;
+}
+
+function Movie(data) {
+  this.title = data.title;
+  this.overview = data.overview;
+  this.average_votes = data.vote_average;
+  this.total_votes = data.vote_count;
+  this.image_url = data.poster_path;
+  this.popularity = data.popularity;
+  this.released_on = data.release_date;
 }
 
 // ERROR HANDLER //
