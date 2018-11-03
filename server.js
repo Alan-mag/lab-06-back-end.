@@ -15,8 +15,7 @@ app.get('/', (request, response) => {
   response.sendFile('index.html', {root: './'});
 });
 
-app.use('*', (request, response) => response.send('Sorry, that route does not exist.'))
-app.listen(PORT,() => console.log(`Listening on port ${PORT}`));
+
 
 // ROUTES //
 
@@ -43,6 +42,7 @@ function getWeather(request, response) {
 }
 
 function getLocation(request, response) {
+  console.log(request);
   const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${request.query.data}&key=${process.env.GEO_API}`;
   return superagent.get(_URL)
     .then(result => {
@@ -78,3 +78,6 @@ function handleError(err, response) {
     response.status(500).send('Sorry you got this error, maybe break time?');
   }
 }
+
+app.use('*', (request, response) => response.send('Sorry, that route does not exist.'))
+app.listen(PORT,() => console.log(`Listening on port ${PORT}`));
