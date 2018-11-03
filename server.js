@@ -2,7 +2,7 @@
 
 const express = require('express');
 const cors = require('cors');
-const request = require('superagent');
+const superagent = require('superagent');
 const app = express();
 
 require('dotenv').config();
@@ -15,67 +15,47 @@ app.get('/', (request, response) => {
   response.sendFile('index.html', {root: './'});
 });
 
-app.get('/location', (request, response) => {
-  searchToLatLng(request.query.data).then((locationData) => {
-    console.log(locationData)
-    response.send(locationData);
-  })
-});
+app.use('*', (request, response) => response.send('Sorry, that route does not exist.'))
+app.listen(PORT,() => console.log(`Listening on port ${PORT}`));
 
-app.get('/weather', (request, response) => {
-  console.log(request.query.data)
-  let weatherDataFormatted = searchWeatherInfo(request.query.data);
-  response.send(weatherDataFormatted);
-})
+// ROUTES //
 
-// helpers //
-// function searchWeatherInfo(query, lat, lng) {
-//   lat = 47.6062;
-//   lng = -122.3321;
-//   let weatherApiKey = process.env.DARK_SKY;
-//   return new Promise((resolve, reject) => {
-//     request
-//       .get(`https://api.darksky.net/forecast/${weatherApiKey}/${lat},${lng}`)
-//       .then(res => {
-//         let jsonData = res.body;
-//         console.log(JSON.stringify(res.body));
-//         // let weather = new Weather()
-//         resolve(jsonData);
-//       })
-//       .catch(err => {
-//         console.log(err);
-//       })
-//   })
-// }
+app.get('/location', getLocation);
+app.get('/weather', getWeather);
 
-function searchWeatherInfo(query) {
-  let weeklyForecast = [];
-  const weatherData = require('./data/darksky.json');
-  weatherData.daily.data.forEach(day => {
-    const dayForecast = new Weather(day.summary, day.time);
-    weeklyForecast.push(dayForecast);
-    dayForecast.search_query = query;
-  })
-  return weeklyForecast;
+
+// HELPER METHODS //
+
+// test url 
+// http://localhost:3000/weather?data[latitude]=44.60&data[longitude]=-122.72
+function getWeather(request, response) {
+  const _URL = `https://api.darksky.net/forecast/${process.env.DARK_SKY}/${request.query.data.latitude},${request.query.data.longitude}`;
+  return superagent.get(_URL)
+    .then(result => {
+      const weatherSummaries = [];
+      result.body.daily.data.forEach(day => {
+        const summary = new Weather(day);
+        weatherSummaries.push(summary);
+      });
+      response.send(weatherSummaries);
+    })
+    .catch(error => handleError(error, response));
 }
 
-// https://api.darksky.net/forecast/6a1861445b9e34e6bf54191b93a27016/37.8267,-122.4233
-
-function searchToLatLng(query) {
-  let apiKey = process.env.GEO_API;
-  return new Promise((resolve, reject) => {
-    request
-      .get(`https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${apiKey}`)
-      .then(res => {
-        let jsonData = res.body;
-        const location = new Location(jsonData.results[0]);
-        resolve(location);
-      })
-      .catch(err => {
-        handleError(err);
-      })
-  })
+function getLocation(request, response) {
+  const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${request.query.data}&key=${process.env.GEO_API}`;
+  return superagent.get(_URL)
+    .then(result => {
+      const jsonData = result.body;
+      const location = new Location(jsonData.results[0]);
+      response.send(location);
+    })
+    .catch(err => {
+      handleError(err);
+    })
 }
+
+// CONSTRUCTORS //
 
 function Location(data) {
   this.formatted_query = data.formatted_address;
@@ -91,15 +71,10 @@ function Weather(forecast, timeMilliseconds) {
   this.time = dateString;
 }
 
-/************ Error Handler */
+// ERROR HANDLER //
 function handleError(err, response) {
   console.error('ERR', err);
   if (response) {
     response.status(500).send('Sorry you got this error, maybe break time?');
   }
 }
-
-app.use('*', (request, response) => response.send('Sorry, that route does not exist.'))
-
-app.listen(PORT,() => console.log(`Listening on port ${PORT}`));
-
