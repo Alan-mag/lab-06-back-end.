@@ -46,18 +46,18 @@ function getWeather(request, response) {
     .catch(error => handleError(error, response));
 }
 
-function getLocation(request, response) {
-  const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${request.query.data}&key=${process.env.GEO_API}`;
-  return superagent.get(_URL)
-    .then(result => {
-      const jsonData = result.body;
-      const location = new Location(jsonData.results[0]);
-      response.send(location);
-    })
-    .catch(err => {
-      handleError(err);
-    })
-}
+// function getLocation(request, response) {
+//   const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${request.query.data}&key=${process.env.GEO_API}`;
+//   return superagent.get(_URL)
+//     .then(result => {
+//       const jsonData = result.body;
+//       const location = new Location(jsonData.results[0]);
+//       response.send(location);
+//     })
+//     .catch(err => {
+//       handleError(err);
+//     })
+// }
 
 function getYelp(request, response) {
   const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.latitude}&longitude=${request.query.longitude}`;
@@ -92,12 +92,74 @@ function getMovies(request, response) {
 
 // CONSTRUCTORS //
 
-function Location(data) {
+function Location(query, data) {
+  this.search_query = query
   this.formatted_query = data.formatted_address;
   this.latitude = data.geometry.location.lat;
   this.longitude = data.geometry.location.lng;
   this.search_query = data.address_components[0].long_name;
 }
+
+Location.prototype.save = function() {
+  let SQL = `
+    INSERT INTO locations
+    (search_query,formatted_query,latitude,longitude)
+    VALUES($1,$2,$3,$4)
+  `;
+  let values = (Object.values(this));
+  client.query(SQL, values);
+}
+
+Location.fetchLocation = (query) => {
+  const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEO_API}`;
+  return superagent.get(_URL)
+    .then(result => {
+      console.log('Got data from API');
+      if ( ! result.body.results.length ) { throw 'No Data'; }
+      else {
+        const location = new Location(query, result.body.results[0]);
+        location.save();
+        return location;
+      }
+    })
+    .catch(err => {
+      handleError(err);
+    })
+}
+
+function getLocation(request, response) {
+  const locationHandler = {
+    query: request.query.data,
+
+    cacheHit: (results) => {
+      console.log('Got data from SQL');
+      response.send(results.rows[0]);
+    },
+
+    cacheMiss: () => {
+      Location.fetchLocation(request.query.data)
+        .then(data => response.send(data));
+    },
+  }
+
+  Location.lookupLocation(locationHandler);
+}
+
+Location.lookupLocation = (handler) => {
+  const SQL = `SELECT * FROM locations WHERE search_query=$1`;
+  const values = [handler.query];
+
+  return client.query(SQL, values)
+    .then( results => {
+      if (results.rowCount > 0) {
+        handler.cacheHit(results);
+      }
+      else {
+        handler.cacheMiss();
+      }
+    })
+    .catch(console.error);
+};
 
 function Weather(forecast, timeMilliseconds) {
   let date = new Date(timeMilliseconds*1000).toString();
