@@ -20,14 +20,17 @@ app.get('/', (request, response) => {
   response.sendFile('index.html', {root: './'});
 });
 
-
+// seattle
+// lat: 47.6062
+// lng: -122.3321
 
 // ROUTES //
 
 app.get('/location', getLocation);
 app.get('/weather', getWeather);
-app.get('/yelp', getYelps);
+app.get('/yelp', getYelp);
 app.get('/movies', getMovies);
+app.get('/meetups', getMeetups);
 
 // ---------------------- LOCATION //
 
@@ -176,78 +179,80 @@ function Restaurant(data) {
   this.bus_url = data.url;
 }
 
-Restaurant.prototype.save = function() {
-  let SQL = `
-    INSERT INTO yelps
-    (name, image_url, price, rating, url, created_at, location_id)
-    VALUES($1, $2, $3, $4, $5, $6, $7)
-  `;
-  let values = (Object.values(this));
-  client.query(SQL, values);
-}
+// Restaurant.prototype.save = function() {
+//   let SQL = `
+//     INSERT INTO yelps
+//     (name, image_url, price, rating, url, created_at, location_id)
+//     VALUES($1, $2, $3, $4, $5, $6, $7)
+//   `;
+//   let values = (Object.values(this));
+//   client.query(SQL, values);
+// }
 
-Restaurant.lookup = function(handler) {
-  const SQL = `SELECT * FROM yelps WHERE location_id=$1;`;
-  client.query(SQL, [handler.location.id])
-    .then(result => {
-      if(result.rowCount > 0) {
-        console.log('Got data from SQL');
-        handler.cacheHit(result);
-      } else {
-        console.log('Got data from API');
-        handler.cacheMiss();
-      }
-    })
-    .catch(error => handleError(error));
-}
+// Restaurant.lookup = function(handler) {
+//   const SQL = `SELECT * FROM yelps WHERE location_id=$1;`;
+//   console.log(handler);
+//   client.query(SQL, [handler.location.id])
+//     .then(result => {
+//       if(result.rowCount > 0) {
+//         console.log('Got data from SQL');
+//         handler.cacheHit(result);
+//       } else {
+//         console.log('Got data from API');
+//         handler.cacheMiss();
+//       }
+//     })
+//     .catch(error => handleError(error));
+// }
 
-Restaurant.fetch = (location) => {
-  const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${location.latitude}&longitude=${location.longitude}`;
-  return superagent.get(_URL)
-    .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
-    .then(result => {
-      const restaurantSummaries = result.body.businesses.map((restaurant) => {
-        return new Restaurant(restaurant);
-      })
-      return restaurantSummaries;
-    })
-    .catch(err => {
-      handleError(err);
-    })
-}
-
-function getYelps(request, response) {
-  const yelpHandler = {
-    query: request.query.data,
-
-    cacheHit: (results) => {
-      console.log('Got data from SQL');
-      response.send(results.rows)
-    },
-
-    cacheMiss: function() {
-      Restaurant.fetch(request.query.data)
-        .then(results => response.send(results))
-        .catch(console.error)
-    },
-  };
-  Restaurant.lookup(handler);
-}
-
-// function getYelp(request, response) {
-//   const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.latitude}&longitude=${request.query.longitude}`;
+// Restaurant.fetch = (location) => {
+//   const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${location.latitude}&longitude=${location.longitude}`;
 //   return superagent.get(_URL)
 //     .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
 //     .then(result => {
 //       const restaurantSummaries = result.body.businesses.map((restaurant) => {
 //         return new Restaurant(restaurant);
 //       })
-//       response.send(restaurantSummaries);
+//       return restaurantSummaries;
 //     })
 //     .catch(err => {
 //       handleError(err);
 //     })
 // }
+
+// function getYelps(request, response) {
+//   console.log(request.query);
+//   const yelpHandler = {
+//     query: request.query.data,
+
+//     cacheHit: (results) => {
+//       console.log('Got data from SQL');
+//       response.send(results.rows)
+//     },
+
+//     cacheMiss: function() {
+//       Restaurant.fetch(request.query.data)
+//         .then(results => response.send(results))
+//         .catch(console.error)
+//     },
+//   };
+//   Restaurant.lookup(yelpHandler);
+// }
+
+function getYelp(request, response) {
+  const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.latitude}&longitude=${request.query.longitude}`;
+  return superagent.get(_URL)
+    .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
+    .then(result => {
+      const restaurantSummaries = result.body.businesses.map((restaurant) => {
+        return new Restaurant(restaurant);
+      })
+      response.send(restaurantSummaries);
+    })
+    .catch(err => {
+      handleError(err);
+    })
+}
 
 // ---------------------- MOVIES //
 
@@ -271,6 +276,29 @@ function getMovies(request, response) {
       });
       movieSummary = movieSummary.slice(0, 51);
       response.send(movieSummary);
+    })
+    .catch(err => {
+      handleError(err);
+    })
+}
+
+function Meetup(data) {
+  this.link = data.link;
+  this.name = data.group.name;
+  this.created_date = data.group.created;
+  this.host = data.group.who; 
+} 
+
+
+function getMeetups(request, response) {
+  const _URL = `https://api.meetup.com/find/upcoming_events?key=${process.env.MEETUP_KEY}&lat=${request.query.latitude}&lon=${request.query.longitude}`;
+  return superagent.get(_URL)
+    .then((val) => {
+      let data = JSON.parse(val.text);
+      let meetupSummary = data.events.map((meetupData) => {
+        return new Meetup(meetupData)
+      });
+      response.send(meetupSummary);
     })
     .catch(err => {
       handleError(err);
