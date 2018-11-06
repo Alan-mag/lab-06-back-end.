@@ -31,6 +31,7 @@ app.get('/weather', getWeather);
 app.get('/yelp', getYelp);
 app.get('/movies', getMovies);
 app.get('/meetups', getMeetups);
+app.get('/trails', getTrails);
 
 // ---------------------- LOCATION //
 
@@ -282,6 +283,8 @@ function getMovies(request, response) {
     })
 }
 
+
+// ---------------------- MEETUP //
 function Meetup(data) {
   this.link = data.link;
   this.name = data.group.name;
@@ -299,6 +302,36 @@ function getMeetups(request, response) {
         return new Meetup(meetupData)
       });
       response.send(meetupSummary);
+    })
+    .catch(err => {
+      handleError(err);
+    })
+}
+
+// ---------------------- HIKING //
+// https://www.hikingproject.com/data/get-trails?lat=40.0274&lon=-105.2519&maxDistance=10&key=YOUR_KEY_HERE
+function Hike(data) {
+  this.name = data.name;
+  this.location = data.location;
+  this.length = data.length;
+  this.stars = data.stars;
+  this.star_votes = data.starVotes;
+  this.summary = data.summary;
+  this.trail_url = data.url;
+  this.conditions = data.conditionStatus;
+  this.condition_date = data.conditionDate;
+  this.condition_time = data.conditionDetails;
+}
+
+function getTrails(request, response){
+  const _URL = `https://www.hikingproject.com/data/get-trails?lat=${request.query.latitude}&lon=${request.query.longitude}&maxDistance=10&key=${process.env.HIKING_KEY}`;
+  return superagent.get(_URL)
+    .then((val) => {
+      let data = JSON.parse(val.text);
+      let hikingSummary = data.trails.map((hikingData) => {
+        return new Hike(hikingData)
+      });
+      response.send(hikingSummary);
     })
     .catch(err => {
       handleError(err);
