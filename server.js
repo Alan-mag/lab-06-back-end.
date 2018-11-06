@@ -26,7 +26,7 @@ app.get('/', (request, response) => {
 
 app.get('/location', getLocation);
 app.get('/weather', getWeather);
-app.get('/yelp', getYelp);
+app.get('/yelp', getYelps);
 app.get('/movies', getMovies);
 
 // ---------------------- LOCATION //
