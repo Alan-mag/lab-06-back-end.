@@ -29,68 +29,7 @@ app.get('/weather', getWeather);
 app.get('/yelp', getYelp);
 app.get('/movies', getMovies);
 
-
-// HELPER METHODS //
-
-// test url 
-// http://localhost:3000/weather?data[latitude]=44.60&data[longitude]=-122.72
-function getWeather(request, response) {
-  const _URL = `https://api.darksky.net/forecast/${process.env.DARK_SKY}/${request.query.data.latitude},${request.query.data.longitude}`;
-  return superagent.get(_URL)
-    .then(result => {
-      const weatherSummaries = result.body.daily.data.map((day) => {
-        return new Weather(day);
-      })
-      response.send(weatherSummaries);
-    })
-    .catch(error => handleError(error, response));
-}
-
-// function getLocation(request, response) {
-//   const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${request.query.data}&key=${process.env.GEO_API}`;
-//   return superagent.get(_URL)
-//     .then(result => {
-//       const jsonData = result.body;
-//       const location = new Location(jsonData.results[0]);
-//       response.send(location);
-//     })
-//     .catch(err => {
-//       handleError(err);
-//     })
-// }
-
-function getYelp(request, response) {
-  const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.latitude}&longitude=${request.query.longitude}`;
-  return superagent.get(_URL)
-    .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
-    .then(result => {
-      const restaurantSummaries = result.body.businesses.map((restaurant) => {
-        return new Restaurant(restaurant);
-      })
-      response.send(restaurantSummaries);
-    })
-    .catch(err => {
-      handleError(err);
-    })
-}
-
-// https://api.themoviedb.org/3/movie/550?api_key=
-function getMovies(request, response) {
-  const _URL = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_KEY}&query=${request.query.city}`;
-  return superagent.get(_URL)
-    .then((val) => {
-      let movieSummary = val.body.results.map((movieData) => {
-        return new Movie(movieData)
-      });
-      movieSummary = movieSummary.slice(0, 51);
-      response.send(movieSummary);
-    })
-    .catch(err => {
-      handleError(err);
-    })
-}
-
-// CONSTRUCTORS //
+// ---------------------- LOCATION //
 
 function Location(query, data) {
   this.search_query = query
@@ -161,20 +100,156 @@ Location.lookupLocation = (handler) => {
     .catch(console.error);
 };
 
-function Weather(forecast, timeMilliseconds) {
-  let date = new Date(timeMilliseconds*1000).toString();
-  let dateString = date.toString().slice(0, 15);
-  this.forecast = forecast;
-  this.time = dateString;
+// ---------------------- WEATHER //
+
+function Weather(day) {
+  this.forecast = day.summary;
+  this.time = new Date(day.time * 1000).toString().slice(0, 15);
 }
+
+Weather.prototype.save = function(id) {
+  const SQL = `INSERT INTO weathers (forecast, time, location_id) VALUES ($1, $2, $3);`;
+  const values = Object.values(this);
+  values.push(id);
+  client.query(SQL, values);
+}
+
+Weather.lookup = function(handler) {
+  const SQL = `SELECT * FROM weathers WHERE location_id=$1;`;
+  client.query(SQL, [handler.location_id])
+    .then(result => {
+      if(result.rowCount > 0) {
+        console.log('Got data from SQL');
+        handler.cacheHit(result);
+      } else {
+        console.log('Got data from API');
+        handler.cacheMiss();
+      }
+    })
+    .catch(error => handleError(error));
+};
+
+// test url 
+// http://localhost:3000/weather?data[latitude]=44.60&data[longitude]=-122.72
+Weather.fetch = function(location) {
+  const _URL = `https://api.darksky.net/forecast/${process.env.DARK_SKY}/${location.latitude},${location.longitude}`;
+  return superagent.get(_URL)
+    .then(result => {
+      const weatherSummaries = result.body.daily.data.map(day => {
+        const summary = new Weather(day);
+        console.log(summary);
+        console.log(location);
+        summary.save(location.id);
+        return summary;
+      });
+      return weatherSummaries;
+    })
+    .catch((err) => {
+      handleError(err);
+    })
+}
+
+function getWeather(request, response) {
+  const handler = {
+    location: request.query.data,
+
+    cacheHit: function(result) {
+      response.send(result.rows);
+    },
+
+    cacheMiss: function() {
+      Weather.fetch(request.query.data)
+        .then(results => response.send(results))
+        .catch(console.error);
+    },
+  };
+  Weather.lookup(handler);
+}
+
+// ---------------------- RESTAURANTS //
 
 function Restaurant(data) {
   this.name = data.name;
   this.image_url = data.image_url;
   this.price = data.price;
   this.rating = data.rating;
-  this.url = data.url;
+  this.bus_url = data.url;
 }
+
+Restaurant.prototype.save = function() {
+  let SQL = `
+    INSERT INTO yelps
+    (name, image_url, price, rating, url, created_at, location_id)
+    VALUES($1, $2, $3, $4, $5, $6, $7)
+  `;
+  let values = (Object.values(this));
+  client.query(SQL, values);
+}
+
+Restaurant.lookup = function(handler) {
+  const SQL = `SELECT * FROM yelps WHERE location_id=$1;`;
+  client.query(SQL, [handler.location.id])
+    .then(result => {
+      if(result.rowCount > 0) {
+        console.log('Got data from SQL');
+        handler.cacheHit(result);
+      } else {
+        console.log('Got data from API');
+        handler.cacheMiss();
+      }
+    })
+    .catch(error => handleError(error));
+}
+
+Restaurant.fetch = (location) => {
+  const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${location.latitude}&longitude=${location.longitude}`;
+  return superagent.get(_URL)
+    .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
+    .then(result => {
+      const restaurantSummaries = result.body.businesses.map((restaurant) => {
+        return new Restaurant(restaurant);
+      })
+      return restaurantSummaries;
+    })
+    .catch(err => {
+      handleError(err);
+    })
+}
+
+function getYelps(request, response) {
+  const yelpHandler = {
+    query: request.query.data,
+
+    cacheHit: (results) => {
+      console.log('Got data from SQL');
+      response.send(results.rows)
+    },
+
+    cacheMiss: function() {
+      Restaurant.fetch(request.query.data)
+        .then(results => response.send(results))
+        .catch(console.error)
+    },
+  };
+  Restaurant.lookup(handler);
+}
+
+// function getYelp(request, response) {
+//   const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.latitude}&longitude=${request.query.longitude}`;
+//   return superagent.get(_URL)
+//     .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
+//     .then(result => {
+//       const restaurantSummaries = result.body.businesses.map((restaurant) => {
+//         return new Restaurant(restaurant);
+//       })
+//       response.send(restaurantSummaries);
+//     })
+//     .catch(err => {
+//       handleError(err);
+//     })
+// }
+
+// ---------------------- MOVIES //
 
 function Movie(data) {
   this.title = data.title;
@@ -184,6 +259,22 @@ function Movie(data) {
   this.image_url = data.poster_path;
   this.popularity = data.popularity;
   this.released_on = data.release_date;
+}
+
+// https://api.themoviedb.org/3/movie/550?api_key=
+function getMovies(request, response) {
+  const _URL = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_KEY}&query=${request.query.city}`;
+  return superagent.get(_URL)
+    .then((val) => {
+      let movieSummary = val.body.results.map((movieData) => {
+        return new Movie(movieData)
+      });
+      movieSummary = movieSummary.slice(0, 51);
+      response.send(movieSummary);
+    })
+    .catch(err => {
+      handleError(err);
+    })
 }
 
 // ERROR HANDLER //
