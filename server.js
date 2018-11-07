@@ -383,6 +383,24 @@ Movie.fetchLocation = (query) => {
     })
 }
 
+function getMovies(request, response) {
+  const movieHandler = {
+    id: request.query.data.id,
+
+    cacheHit: (results) => {
+      response.send(results);
+    },
+
+    cacheMiss: () => {
+      Movie.fetch(request.query.data)
+        .then(data => response.send(data))
+        .catch(console.error)
+    },
+  }
+
+  Movie.lookup(movieHandler);
+}
+
 // https://api.themoviedb.org/3/movie/550?api_key=
 // function getMovies(request, response) {
 //   const _URL = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_KEY}&query=${request.query.city}`;
@@ -427,7 +445,7 @@ Meetup.deleteEntryById = function(id) {
     .catch(error => handleError(error));
 }
 
-Movie.lookup = function(handler) {
+Meetup.lookup = function(handler) {
   const SQL = `SELECT * FROM meetups WHERE location_id=$1;`;
   client.query(SQL, [handler.id])
     .then(result => {
@@ -438,7 +456,7 @@ Movie.lookup = function(handler) {
 
         if (result.rowCount > 0 && currentAge > 1) {
           console.log('DATA was too old');
-          Movie.deleteEntryById(handler.id);
+          Meetup.deleteEntryById(handler.id);
           handler.cacheMiss();
         } else {
           console.log('DATA was just right');
@@ -452,9 +470,8 @@ Movie.lookup = function(handler) {
     .catch(error => handleError(error));
 }
 
-Movie.fetch = (query) => {
-  const _URL = `https://api.meetup.com/find/upcoming_events?key=${process.env.MEETUP_KEY}&lat=${query.latitude}&lon=${query.longitude}`;
-  return superagent.get(_URL)
+Meetup.fetch = (query) => {
+  const _URL = `https://api.meetup.com/find/upcoming_events?key=${process.env.MEETUP_KEY}&lat=${request.query.latitude}&lon=${request.query.longitude}`;
     .then((val) => {
       let data = JSON.parse(val.text);
       let meetupSummary = data.events.map((meetupData) => {
@@ -467,8 +484,8 @@ Movie.fetch = (query) => {
     })
 }
 
-function getMovies(request, response) {
-  const movieHandler = {
+function getMeetups(request, response) {
+  const meetupHandler = {
     id: request.query.data.id,
 
     cacheHit: (results) => {
@@ -476,13 +493,13 @@ function getMovies(request, response) {
     },
 
     cacheMiss: () => {
-      Movie.fetch(request.query.data)
+      Meetup.fetch(request.query.data)
         .then(data => response.send(data))
         .catch(console.error)
     },
   }
 
-  Movie.lookup(movieHandler);
+  Meetup.lookup(meetupHandler);
 }
 
 // function getMeetups(request, response) {
