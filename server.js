@@ -406,23 +406,99 @@ function Meetup(data) {
   this.name = data.group.name;
   this.created_date = data.group.created;
   this.host = data.group.who; 
-} 
+}
 
+Meetup.prototype.save = function() {
+  let SQL = `
+    INSERT INTO meetups
+    (link, name, created_date, host)
+    VALUES($1,$2,$3,$4)
+  `;
+  let values = (Object.values(this));
+  client.query(SQL, values);
+}
 
-function getMeetups(request, response) {
-  const _URL = `https://api.meetup.com/find/upcoming_events?key=${process.env.MEETUP_KEY}&lat=${request.query.latitude}&lon=${request.query.longitude}`;
+Meetup.deleteEntryById = function(id) {
+  const SQL = `DELETE FROM meetups WHERE location_id=${id}`;
+  client.query(SQL)
+    .then(() => {
+      console.log('DELETE entry from SQL');
+    })
+    .catch(error => handleError(error));
+}
+
+Movie.lookup = function(handler) {
+  const SQL = `SELECT * FROM meetups WHERE location_id=$1;`;
+  client.query(SQL, [handler.id])
+    .then(result => {
+      if(result.rowCount > 0) {
+        console.log('Data existed in SQL');
+
+        let currentAge = Date.now() - result.rows[0].created_at / (1000 * 60);
+
+        if (result.rowCount > 0 && currentAge > 1) {
+          console.log('DATA was too old');
+          Movie.deleteEntryById(handler.id);
+          handler.cacheMiss();
+        } else {
+          console.log('DATA was just right');
+          handler.cacheHit(result);
+        }
+      } else {
+        console.log('Got data from API');
+        handler.cacheMiss();
+      }
+    })
+    .catch(error => handleError(error));
+}
+
+Movie.fetch = (query) => {
+  const _URL = `https://api.meetup.com/find/upcoming_events?key=${process.env.MEETUP_KEY}&lat=${query.latitude}&lon=${query.longitude}`;
   return superagent.get(_URL)
     .then((val) => {
       let data = JSON.parse(val.text);
       let meetupSummary = data.events.map((meetupData) => {
         return new Meetup(meetupData)
       });
-      response.send(meetupSummary);
+      return meetupSummary;
     })
     .catch(err => {
       handleError(err);
     })
 }
+
+function getMovies(request, response) {
+  const movieHandler = {
+    id: request.query.data.id,
+
+    cacheHit: (results) => {
+      response.send(results);
+    },
+
+    cacheMiss: () => {
+      Movie.fetch(request.query.data)
+        .then(data => response.send(data))
+        .catch(console.error)
+    },
+  }
+
+  Movie.lookup(movieHandler);
+}
+
+// function getMeetups(request, response) {
+//   const _URL = `https://api.meetup.com/find/upcoming_events?key=${process.env.MEETUP_KEY}&lat=${request.query.latitude}&lon=${request.query.longitude}`;
+//   return superagent.get(_URL)
+//     .then((val) => {
+//       let data = JSON.parse(val.text);
+//       let meetupSummary = data.events.map((meetupData) => {
+//         return new Meetup(meetupData)
+//       });
+//       response.send(meetupSummary);
+//     })
+//     .catch(err => {
+//       handleError(err);
+//     })
+// }
 
 // ---------------------- HIKING //
 // https://www.hikingproject.com/data/get-trails?lat=40.0274&lon=-105.2519&maxDistance=10&key=YOUR_KEY_HERE
