@@ -53,6 +53,40 @@ Location.prototype.save = function() {
   client.query(SQL, values);
 }
 
+Location.deleteEntryById = function(id) {
+  const SQL = `DELETE FROM locations WHERE location_id=${id}`;
+  client.query(SQL)
+    .then(() => {
+      console.log('DELETE entry from SQL');
+    })
+    .catch(error => handleError(error));
+}
+
+Location.lookup = function(handler) {
+  const SQL = `SELECT * FROM locations WHERE location_id=$1;`;
+  client.query(SQL, [handler.id])
+    .then(result => {
+      if(result.rowCount > 0) {
+        console.log('Data existed in SQL');
+
+        let currentAge = Date.now() - result.rows[0].created_at / (1000 * 60);
+
+        if (result.rowCount > 0 && currentAge > 1) {
+          console.log('DATA was too old');
+          Location.deleteEntryById(handler.id);
+          handler.cacheMiss();
+        } else {
+          console.log('DATA was just right');
+          handler.cacheHit(result);
+        }
+      } else {
+        console.log('Got data from API');
+        handler.cacheMiss();
+      }
+    })
+    .catch(error => handleError(error));
+}
+
 Location.fetchLocation = (query) => {
   const _URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEO_API}`;
   return superagent.get(_URL)
@@ -72,37 +106,21 @@ Location.fetchLocation = (query) => {
 
 function getLocation(request, response) {
   const locationHandler = {
-    query: request.query.data,
+    id: request.query.data.id,
 
     cacheHit: (results) => {
-      console.log('Got data from SQL');
       response.send(results.rows[0]);
     },
 
     cacheMiss: () => {
       Location.fetchLocation(request.query.data)
-        .then(data => response.send(data));
+        .then(data => response.send(data))
+        .catch(console.error)
     },
   }
 
-  Location.lookupLocation(locationHandler);
+  Location.lookup(locationHandler);
 }
-
-Location.lookupLocation = (handler) => {
-  const SQL = `SELECT * FROM locations WHERE search_query=$1`;
-  const values = [handler.query];
-
-  return client.query(SQL, values)
-    .then( results => {
-      if (results.rowCount > 0) {
-        handler.cacheHit(results);
-      }
-      else {
-        handler.cacheMiss();
-      }
-    })
-    .catch(console.error);
-};
 
 // ---------------------- WEATHER //
 
@@ -306,21 +324,80 @@ function Movie(data) {
   this.released_on = data.release_date;
 }
 
-// https://api.themoviedb.org/3/movie/550?api_key=
-function getMovies(request, response) {
-  const _URL = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_KEY}&query=${request.query.city}`;
+Movie.prototype.save = function() {
+  let SQL = `
+    INSERT INTO movies
+    (title, overview, average_votes, total_votes, image_url, popularity, released_on, location_id)
+    VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+  `;
+  let values = (Object.values(this));
+  client.query(SQL, values);
+}
+
+Movie.deleteEntryById = function(id) {
+  const SQL = `DELETE FROM movies WHERE location_id=${id}`;
+  client.query(SQL)
+    .then(() => {
+      console.log('DELETE entry from SQL');
+    })
+    .catch(error => handleError(error));
+}
+
+Movie.lookup = function(handler) {
+  const SQL = `SELECT * FROM movies WHERE location_id=$1;`;
+  client.query(SQL, [handler.id])
+    .then(result => {
+      if(result.rowCount > 0) {
+        console.log('Data existed in SQL');
+
+        let currentAge = Date.now() - result.rows[0].created_at / (1000 * 60);
+
+        if (result.rowCount > 0 && currentAge > 1) {
+          console.log('DATA was too old');
+          Movie.deleteEntryById(handler.id);
+          handler.cacheMiss();
+        } else {
+          console.log('DATA was just right');
+          handler.cacheHit(result);
+        }
+      } else {
+        console.log('Got data from API');
+        handler.cacheMiss();
+      }
+    })
+    .catch(error => handleError(error));
+}
+
+Movie.fetchLocation = (query) => {
+  const _URL = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_KEY}&query=${query.city}`;
   return superagent.get(_URL)
     .then((val) => {
       let movieSummary = val.body.results.map((movieData) => {
         return new Movie(movieData)
       });
       movieSummary = movieSummary.slice(0, 51);
-      response.send(movieSummary);
+      return movieSummary;
     })
     .catch(err => {
       handleError(err);
     })
 }
+
+// https://api.themoviedb.org/3/movie/550?api_key=
+// function getMovies(request, response) {
+//   const _URL = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_KEY}&query=${request.query.city}`;
+//   return superagent.get(_URL)
+//     .then((val) => {
+//       let movieSummary = val.body.results.map((movieData) => {
+//         return new Movie(movieData)
+//       });
+//       movieSummary = movieSummary.slice(0, 51);
+//       response.send(movieSummary);
+//     })
+//     .catch(err => {
+//       handleError(err);
+//     })
+// }
 
 
 // ---------------------- MEETUP //
