@@ -532,8 +532,53 @@ function Hike(data) {
   this.condition_time = data.conditionDetails;
 }
 
-function getTrails(request, response){
-  const _URL = `https://www.hikingproject.com/data/get-trails?lat=${request.query.latitude}&lon=${request.query.longitude}&maxDistance=10&key=${process.env.HIKING_KEY}`;
+Hike.prototype.save = function() {
+  let SQL = `
+    INSERT INTO trails
+    (name, location, length, stars, star_votes, summary, trail_url, conditions, condition_date, condition_time)
+    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    VALUES($1,$2,$3,$4)
+  `;
+  let values = (Object.values(this));
+  client.query(SQL, values);
+}
+
+Hike.deleteEntryById = function(id) {
+  const SQL = `DELETE FROM trails WHERE location_id=${id}`;
+  client.query(SQL)
+    .then(() => {
+      console.log('DELETE entry from SQL');
+    })
+    .catch(error => handleError(error));
+}
+
+Hike.lookup = function(handler) {
+  const SQL = `SELECT * FROM trails WHERE location_id=$1;`;
+  client.query(SQL, [handler.id])
+    .then(result => {
+      if(result.rowCount > 0) {
+        console.log('Data existed in SQL');
+
+        let currentAge = Date.now() - result.rows[0].created_at / (1000 * 60);
+
+        if (result.rowCount > 0 && currentAge > 1) {
+          console.log('DATA was too old');
+          Hike.deleteEntryById(handler.id);
+          handler.cacheMiss();
+        } else {
+          console.log('DATA was just right');
+          handler.cacheHit(result);
+        }
+      } else {
+        console.log('Got data from API');
+        handler.cacheMiss();
+      }
+    })
+    .catch(error => handleError(error));
+}
+
+Hike.fetch = (query) => {
+  const _URL = `https://www.hikingproject.com/data/get-trails?lat=${query.latitude}&lon=${query.longitude}&maxDistance=10&key=${process.env.HIKING_KEY}`;
   return superagent.get(_URL)
     .then((val) => {
       let data = JSON.parse(val.text);
@@ -546,6 +591,39 @@ function getTrails(request, response){
       handleError(err);
     })
 }
+
+function getTrails(request, response) {
+  const hikeHandler = {
+    id: request.query.data.id,
+
+    cacheHit: (results) => {
+      response.send(results);
+    },
+
+    cacheMiss: () => {
+      Hike.fetch(request.query.data)
+        .then(data => response.send(data))
+        .catch(console.error)
+    },
+  }
+
+  Hike.lookup(hikeHandler);
+}
+
+// function getTrails(request, response){
+//   const _URL = `https://www.hikingproject.com/data/get-trails?lat=${request.query.latitude}&lon=${request.query.longitude}&maxDistance=10&key=${process.env.HIKING_KEY}`;
+//   return superagent.get(_URL)
+//     .then((val) => {
+//       let data = JSON.parse(val.text);
+//       let hikingSummary = data.trails.map((hikingData) => {
+//         return new Hike(hikingData)
+//       });
+//       response.send(hikingSummary);
+//     })
+//     .catch(err => {
+//       handleError(err);
+//     })
+// }
 
 // ERROR HANDLER //
 function handleError(err, response) {
