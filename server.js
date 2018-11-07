@@ -297,21 +297,6 @@ function getYelps(request, response) {
   Restaurant.lookup(yelpHandler);
 }
 
-// function getYelp(request, response) {
-//   const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.latitude}&longitude=${request.query.longitude}`;
-//   return superagent.get(_URL)
-//     .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
-//     .then(result => {
-//       const restaurantSummaries = result.body.businesses.map((restaurant) => {
-//         return new Restaurant(restaurant);
-//       })
-//       response.send(restaurantSummaries);
-//     })
-//     .catch(err => {
-//       handleError(err);
-//     })
-// }
-
 // ---------------------- MOVIES //
 
 function Movie(data) {
@@ -401,23 +386,6 @@ function getMovies(request, response) {
   Movie.lookup(movieHandler);
 }
 
-// https://api.themoviedb.org/3/movie/550?api_key=
-// function getMovies(request, response) {
-//   const _URL = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_KEY}&query=${request.query.city}`;
-//   return superagent.get(_URL)
-//     .then((val) => {
-//       let movieSummary = val.body.results.map((movieData) => {
-//         return new Movie(movieData)
-//       });
-//       movieSummary = movieSummary.slice(0, 51);
-//       response.send(movieSummary);
-//     })
-//     .catch(err => {
-//       handleError(err);
-//     })
-// }
-
-
 // ---------------------- MEETUP //
 function Meetup(data) {
   this.link = data.link;
@@ -501,21 +469,6 @@ function getMeetups(request, response) {
 
   Meetup.lookup(meetupHandler);
 }
-
-// function getMeetups(request, response) {
-//   const _URL = `https://api.meetup.com/find/upcoming_events?key=${process.env.MEETUP_KEY}&lat=${request.query.latitude}&lon=${request.query.longitude}`;
-//   return superagent.get(_URL)
-//     .then((val) => {
-//       let data = JSON.parse(val.text);
-//       let meetupSummary = data.events.map((meetupData) => {
-//         return new Meetup(meetupData)
-//       });
-//       response.send(meetupSummary);
-//     })
-//     .catch(err => {
-//       handleError(err);
-//     })
-// }
 
 // ---------------------- HIKING //
 // https://www.hikingproject.com/data/get-trails?lat=40.0274&lon=-105.2519&maxDistance=10&key=YOUR_KEY_HERE
@@ -609,21 +562,6 @@ function getTrails(request, response) {
 
   Hike.lookup(hikeHandler);
 }
-
-// function getTrails(request, response){
-//   const _URL = `https://www.hikingproject.com/data/get-trails?lat=${request.query.latitude}&lon=${request.query.longitude}&maxDistance=10&key=${process.env.HIKING_KEY}`;
-//   return superagent.get(_URL)
-//     .then((val) => {
-//       let data = JSON.parse(val.text);
-//       let hikingSummary = data.trails.map((hikingData) => {
-//         return new Hike(hikingData)
-//       });
-//       response.send(hikingSummary);
-//     })
-//     .catch(err => {
-//       handleError(err);
-//     })
-// }
 
 // ERROR HANDLER //
 function handleError(err, response) {
