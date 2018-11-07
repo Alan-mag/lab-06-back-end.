@@ -28,7 +28,7 @@ app.get('/', (request, response) => {
 
 app.get('/location', getLocation);
 app.get('/weather', getWeather);
-app.get('/yelp', getYelp);
+app.get('/yelp', getYelps);
 app.get('/movies', getMovies);
 app.get('/meetups', getMeetups);
 app.get('/trails', getTrails);
@@ -112,19 +112,39 @@ function Weather(day) {
 }
 
 Weather.prototype.save = function(id) {
-  const SQL = `INSERT INTO weathers (forecast, time, location_id) VALUES ($1, $2, $3);`;
+  const SQL = `INSERT INTO weathers (forecast, time, location_id, created_at) VALUES ($1, $2, $3, $4);`;
   const values = Object.values(this);
   values.push(id);
+  values.push(Date.now());
   client.query(SQL, values);
+}
+
+Weather.deleteEntryById = function(id) {
+  const SQL = `DELETE FROM weathers WHERE location_id=${id};`;
+  client.query(SQL)
+    .then(() => {
+      console.log('DELETE entry from SQL');
+    })
+    .catch(error => handleError(error));
 }
 
 Weather.lookup = function(handler) {
   const SQL = `SELECT * FROM weathers WHERE location_id=$1;`;
-  client.query(SQL, [handler.location_id])
+  client.query(SQL, [handler.id])
     .then(result => {
       if(result.rowCount > 0) {
-        console.log('Got data from SQL');
-        handler.cacheHit(result);
+        console.log('Data existed in SQL');
+
+        let currentAge = Date.now() - result.rows[0].created_at / (1000 * 60);
+
+        if (result.rowCount > 0 && currentAge > 1) {
+          console.log('DATA was too old');
+          Weather.deleteEntryById(handler.id);
+          handler.cacheMiss();
+        } else {
+          console.log('DATA was just right');
+          handler.cacheHit(result);
+        }
       } else {
         console.log('Got data from API');
         handler.cacheMiss();
@@ -135,15 +155,14 @@ Weather.lookup = function(handler) {
 
 // test url 
 // http://localhost:3000/weather?data[latitude]=44.60&data[longitude]=-122.72
-Weather.fetch = function(location) {
-  const _URL = `https://api.darksky.net/forecast/${process.env.DARK_SKY}/${location.latitude},${location.longitude}`;
+Weather.fetch = function(query) {
+  console.log(query);
+  const _URL = `https://api.darksky.net/forecast/${process.env.DARK_SKY}/${query.data.latitude},${query.data.longitude}`;
   return superagent.get(_URL)
     .then(result => {
       const weatherSummaries = result.body.daily.data.map(day => {
         const summary = new Weather(day);
-        console.log(summary);
-        console.log(location);
-        summary.save(location.id);
+        summary.save(query.data.id);
         return summary;
       });
       return weatherSummaries;
@@ -154,15 +173,16 @@ Weather.fetch = function(location) {
 }
 
 function getWeather(request, response) {
+  console.log(request.data);
   const handler = {
-    location: request.query.data,
+    id: request.query.data.id,
 
     cacheHit: function(result) {
       response.send(result.rows);
     },
 
     cacheMiss: function() {
-      Weather.fetch(request.query.data)
+      Weather.fetch(request.query)
         .then(results => response.send(results))
         .catch(console.error);
     },
@@ -180,80 +200,99 @@ function Restaurant(data) {
   this.bus_url = data.url;
 }
 
-// Restaurant.prototype.save = function() {
-//   let SQL = `
-//     INSERT INTO yelps
-//     (name, image_url, price, rating, url, created_at, location_id)
-//     VALUES($1, $2, $3, $4, $5, $6, $7)
-//   `;
-//   let values = (Object.values(this));
-//   client.query(SQL, values);
-// }
+Restaurant.prototype.save = function() {
+  let SQL = `
+    INSERT INTO yelps
+    (name, image_url, price, rating, url, created_at, location_id)
+    VALUES($1, $2, $3, $4, $5, $6, $7)
+  `;
+  let values = (Object.values(this));
+  client.query(SQL, values);
+}
 
-// Restaurant.lookup = function(handler) {
-//   const SQL = `SELECT * FROM yelps WHERE location_id=$1;`;
-//   console.log(handler);
-//   client.query(SQL, [handler.location.id])
-//     .then(result => {
-//       if(result.rowCount > 0) {
-//         console.log('Got data from SQL');
-//         handler.cacheHit(result);
-//       } else {
-//         console.log('Got data from API');
-//         handler.cacheMiss();
-//       }
-//     })
-//     .catch(error => handleError(error));
-// }
+Restaurant.deleteEntryById = function(id) {
+  const SQL = `DELETE FROM yelps WHERE location_id=${id};`;
+  client.query(SQL)
+    .then(() => {
+      console.log('DELETE entry from SQL');
+    })
+    .catch(error => handleError(error));
+}
 
-// Restaurant.fetch = (location) => {
-//   const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${location.latitude}&longitude=${location.longitude}`;
+Restaurant.lookup = function(handler) {
+  const SQL = `SELECT * FROM yelps WHERE location_id=$1;`;
+  client.query(SQL, [handler.id])
+    .then(result => {
+      if(result.rowCount > 0) {
+        console.log('Data existed in SQL');
+
+        let currentAge = Date.now() - result.rows[0].created_at / (1000 * 60);
+        
+        if (result.rowCount > 0 && currentAge > 1) {
+          console.log('DATA was too old');
+          Restaurant.deleteEntryById(handler.id);
+          handler.cacheMiss();
+        } else {
+          console.log('DATA was just right');
+          handler.cacheHit(result);
+        }
+      } else {
+        console.log('Got data from API');
+        handler.cacheMiss();
+      }
+    })
+    .catch(error => handleError(error));
+}
+
+Restaurant.fetch = (location) => {
+  const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${location.latitude}&longitude=${location.longitude}`;
+  return superagent.get(_URL)
+    .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
+    .then(result => {
+      const restaurantSummaries = result.body.businesses.map((restaurant) => {
+        const curRestaurant = new Restaurant(restaurant);
+        curRestaurant.save(query.data.id);
+        return curRestaurant;
+      })
+      return restaurantSummaries;
+    })
+    .catch(err => {
+      handleError(err);
+    })
+}
+
+function getYelps(request, response) {
+  console.log(request.query);
+  const yelpHandler = {
+    id: request.query.data.id,
+
+    cacheHit: (results) => {
+      response.send(results.rows)
+    },
+
+    cacheMiss: function() {
+      Restaurant.fetch(request.query)
+        .then(results => response.send(results))
+        .catch(console.error)
+    },
+  };
+  Restaurant.lookup(yelpHandler);
+}
+
+// function getYelp(request, response) {
+//   const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.latitude}&longitude=${request.query.longitude}`;
 //   return superagent.get(_URL)
 //     .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
 //     .then(result => {
 //       const restaurantSummaries = result.body.businesses.map((restaurant) => {
 //         return new Restaurant(restaurant);
 //       })
-//       return restaurantSummaries;
+//       response.send(restaurantSummaries);
 //     })
 //     .catch(err => {
 //       handleError(err);
 //     })
 // }
-
-// function getYelps(request, response) {
-//   console.log(request.query);
-//   const yelpHandler = {
-//     query: request.query.data,
-
-//     cacheHit: (results) => {
-//       console.log('Got data from SQL');
-//       response.send(results.rows)
-//     },
-
-//     cacheMiss: function() {
-//       Restaurant.fetch(request.query.data)
-//         .then(results => response.send(results))
-//         .catch(console.error)
-//     },
-//   };
-//   Restaurant.lookup(yelpHandler);
-// }
-
-function getYelp(request, response) {
-  const _URL = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.latitude}&longitude=${request.query.longitude}`;
-  return superagent.get(_URL)
-    .set('Authorization', `Bearer ${process.env.YELP_KEY}`)
-    .then(result => {
-      const restaurantSummaries = result.body.businesses.map((restaurant) => {
-        return new Restaurant(restaurant);
-      })
-      response.send(restaurantSummaries);
-    })
-    .catch(err => {
-      handleError(err);
-    })
-}
 
 // ---------------------- MOVIES //
 
